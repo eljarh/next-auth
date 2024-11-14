@@ -1,0 +1,54 @@
+{
+  "name": "@next-auth/nats-kv-adapter",
+  "version": "0.0.1",
+  "description": "NATS KeyValuestore adapter for Auth.js.",
+  "homepage": "https://next-auth.js.org",
+  "repository": "https://github.com/nextauthjs/next-auth",
+  "bugs": {
+    "url": "https://github.com/nextauthjs/next-auth/issues"
+  },
+  "author": "github.com/eljarh",
+  "main": "dist/index.js",
+  "license": "ISC",
+  "keywords": [
+    "next-auth",
+    "next.js",
+    "oauth",
+    "NATS",
+    "nats.io"
+  ],
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "jest",
+    "build": "tsc"
+  },
+  "files": [
+    "README.md",
+    "dist"
+  ],
+  "peerDependencies": {
+    "next-auth": "^4",
+    "@nats-io/kv": "^3.0.0-20",
+    "@nats-io/transport-node": "^3.0.0-24"
+  },
+  "devDependencies": {
+    "@next-auth/adapter-test": "workspace:*",
+    "@next-auth/tsconfig": "workspace:*",
+    "@types/uuid": "^8.3.3",
+    "dotenv": "^10.0.0",
+    "isomorphic-fetch": "3.0.0",
+    "jest": "^27.4.3",
+    "next-auth": "workspace:*",
+    "@nats-io/kv": "^3.0.0-20",
+    "@nats-io/transport-node": "^3.0.0-24"
+  },
+  "dependencies": {
+    "uuid": "^8.3.2"
+  },
+  "jest": {
+    "preset": "@next-auth/adapter-test/jest"
+  }
+}

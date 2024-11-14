@@ -1,0 +1,5 @@
+services:
+  nats:
+    image: nats:latest
+    ports:
+      - "5222:4222"
