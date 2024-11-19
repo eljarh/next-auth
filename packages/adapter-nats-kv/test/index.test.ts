@@ -5,7 +5,7 @@ import { connect } from "@nats-io/transport-node"
 import { Kvm } from "@nats-io/kv"
 
 const nc = await connect({
-  servers: "nats://localhost:4222",
+  servers: "nats://localhost:5222",
   authenticator: undefined,
 })
 

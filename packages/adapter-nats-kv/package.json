@@ -1,5 +1,5 @@
 {
-  "name": "@auth/nats-kv-adapter",
+  "name": "@mattilsynet/nats-kv-adapter",
   "version": "0.0.1",
   "description": "NATS KeyValue-store adapter for Auth.js.",
   "homepage": "https://authjs.dev",
