@@ -1,6 +1,6 @@
 {
   "name": "@mattilsynet/nats-kv-adapter",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "NATS KeyValue-store adapter for Auth.js.",
   "homepage": "https://authjs.dev",
   "repository": "https://github.com/eljarh/next-auth",
@@ -39,9 +39,7 @@
     "clean": "rm -rf *.js *.d.ts*"
   },
   "dependencies": {
-    "@auth/core": "workspace:*",
-    "@nats-io/kv": "^3.0.0-20",
-    "@nats-io/transport-node": "^3.0.0-24"
+    "@next-auth": "^5.0.0-beta.25"
   },
   "peerDependencies": {
     "@nats-io/kv": "^3.0.0-14",
