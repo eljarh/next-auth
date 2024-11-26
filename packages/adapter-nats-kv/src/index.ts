@@ -24,13 +24,6 @@ import {
 } from "@auth/core/adapters"
 import { KV } from "@nats-io/kv"
 
-export type KV_NAME = "authKV"
-
-//type KVs<T extends KV_NAMES[]>
-export type AKV<T extends KV_NAME[]> = {
-  [K in T[number]]: KV
-}
-
 /** */
 /* Usage:
 
@@ -100,7 +93,6 @@ export function hydrateDates(json: object) {
 
 //replace symbols that are not allowed in keys
 export function natsKey(identifier: string) {
-  console.log("natsKey - ", identifier)
   return identifier.replace("@", "_at_").replace(":", "_colon_") as string
 }
 
@@ -109,7 +101,13 @@ export function nats2json(value: any) {
 }
 
 export function NatsKVAdapter(
-  client: KV,
+  natsConnect:
+    | (() => Promise<
+        { kv: KV } & {
+          [Symbol.asyncDispose]: () => Promise<void>
+        }
+      >)
+    | KV,
   options: NextKVAdapterOptions = {}
 ): Adapter {
   const mergedOptions = {
@@ -129,232 +127,44 @@ export function NatsKVAdapter(
   const verificationTokenKeyPrefix =
     baseKeyPrefix + mergedOptions.verificationTokenKeyPrefix
 
-  const setObjectAsJson = async (key: string, obj: any) =>
-    await client.put(key, JSON.stringify(obj))
-
-  const setAccount = async (id: string, account: AdapterAccount) => {
-    console.log("setAccount", id, account)
-    const accountKey = accountKeyPrefix + natsKey(id)
-    await setObjectAsJson(accountKey, account)
-    await client.put(
-      accountByUserIdPrefix + natsKey(account.userId),
-      accountKey
-    )
-    return account
-  }
-
-  const getAccount = async (id: string) => {
-    console.log("getAccount", id)
-    const data = await client.get(accountKeyPrefix + natsKey(id))
-    if (!data || data.length == 0) return null
-    const account = data.json<AdapterAccount>()
-    return hydrateDates(account)
-  }
-
-  const setSession = async (
-    id: string,
-    session: AdapterSession
-  ): Promise<AdapterSession> => {
-    console.log("setSession", id, session)
-    const sessionKey = sessionKeyPrefix + natsKey(id)
-    await setObjectAsJson(sessionKey, session)
-    await client.put(
-      sessionByUserIdKeyPrefix + natsKey(session.userId),
-      sessionKey
-    )
-    return session
-  }
-
-  const getSession = async (id: string) => {
-    console.log("getSession", id)
-    const data = await client.get(sessionKeyPrefix + natsKey(id))
-    if (!data || data.length == 0) return null
-    const session = data.json<AdapterSession>()
-    return hydrateDates(session)
-  }
-
-  const setUser = async (
-    id: string,
-    user: AdapterUser
-  ): Promise<AdapterUser> => {
-    console.log("setUser", id, user)
-    await setObjectAsJson(userKeyPrefix + natsKey(id), user)
-    await client.put(`${emailKeyPrefix}${natsKey(user.email)}`, id)
-    return user
-  }
-
-  const getUser = async (id: string) => {
-    console.log("getUser", id)
-    const data = await client.get(userKeyPrefix + natsKey(id))
-    if (!data || data.length == 0) return null
-    const user = data.json<AdapterUser>()
-    return hydrateDates(user)
-  }
-
-  return {
-    async createUser(user) {
-      const id = crypto.randomUUID()
-      // TypeScript thinks the emailVerified field is missing
-      // but all fields are copied directly from user, so it's there
-      return await setUser(id, { ...user, id })
-    },
-    getUser,
-    async getUserByEmail(email) {
-      console.log("getUserByEmail", email)
-      const data = await client.get(emailKeyPrefix + natsKey(email))
-      if (!data || data.length == 0) return null
-      const userId = data.string()
-      return await getUser(userId)
-    },
-    async getUserByAccount(account) {
-      const dbAccount = await getAccount(
-        `${account.provider}.${account.providerAccountId}`
-      )
-      if (!dbAccount) return null
-      return await getUser(dbAccount.userId)
-    },
-    async updateUser(updates) {
-      console.log("updateUser", updates)
-      const userId = updates.id as string
-      const user = await getUser(userId)
-      return await setUser(userId, { ...(user as AdapterUser), ...updates })
-    },
-    async linkAccount(account) {
-      console.log("linkAccount", account)
-      const id = `${account.provider}.${account.providerAccountId}`
-      return await setAccount(id, { ...account, id })
-    },
-    createSession: (session) => setSession(session.sessionToken, session),
-    async getSessionAndUser(sessionToken) {
-      console.log("getSessionAndUser", sessionToken)
-      const session = await getSession(sessionToken)
-      if (!session) return null
-      const user = await getUser(session.userId)
-      if (!user) return null
-      return { session, user }
-    },
-    async updateSession(updates) {
-      console.log("updateSession", updates)
-      const session = await getSession(updates.sessionToken)
-      if (!session) return null
-      return await setSession(updates.sessionToken, { ...session, ...updates })
-    },
-    async deleteSession(sessionToken) {
-      console.log("deleteSession", sessionToken)
-      await client.purge(sessionKeyPrefix + sessionToken)
-    },
-    async createVerificationToken(verificationToken) {
-      console.log("createVerificationToken", verificationToken)
-      await setObjectAsJson(
-        verificationTokenKeyPrefix +
-          natsKey(verificationToken.identifier) +
-          "." +
-          natsKey(verificationToken.token),
-        verificationToken
-      )
-      return verificationToken
-    },
-    async useVerificationToken(verificationToken) {
-      console.log("useVerificationToken", verificationToken)
-      const tokenKey =
-        verificationTokenKeyPrefix +
-        natsKey(verificationToken.identifier) +
-        "." +
-        natsKey(verificationToken.token)
-
-      const data = await client.get(tokenKey)
-      if (!data || data.length == 0) return null
-      const token = data.json<VerificationToken>()
-      await client.purge(tokenKey)
-      return hydrateDates(token)
-      // return reviveFromJson(token)
-    },
-    async unlinkAccount(account) {
-      console.log("unlinkAccount", account)
-      const id = `${account.provider}.${account.providerAccountId}`
-      const dbAccount = await getAccount(natsKey(id))
-      if (!dbAccount) return
-      const accountKey = `${accountKeyPrefix}${natsKey(id)}`
-      await client.purge(accountKey)
-      await client.purge(
-        `${(accountByUserIdPrefix + dbAccount.userId) as string}`
-      )
-    },
-    async deleteUser(userId) {
-      console.log("deleteUser", userId)
-      const user = await getUser(natsKey(userId))
-      if (!user) return
-      const accountByUserKey = accountByUserIdPrefix + natsKey(userId)
-      const accountKey = await client
-        .get(accountByUserKey)
-        .then((data) => data?.string())
-      const sessionByUserIdKey = sessionByUserIdKeyPrefix + natsKey(userId)
-      const sessionKey = await client
-        .get(sessionByUserIdKey)
-        .then((data) => data?.string())
-      await client.purge(userKeyPrefix + natsKey(userId))
-      await client.purge(`${emailKeyPrefix}${natsKey(user.email)}`)
-      await client.purge(accountKey as string)
-      await client.purge(accountByUserKey)
-      await client.purge(sessionKey as string)
-      await client.purge(sessionByUserIdKey)
-    },
-  }
-}
-
-export async function NatsKVAdapterAsync(
-  /*natsConnect: <T extends KV_NAME[]>(
-    kvName: T
-  ) => Promise<
-    AKV<T> & {
-      [Symbol.asyncDispose]: () => Promise<void>
-    }
-  >,*/
-  natsConnect: () => Promise<
-    { authKV: KV } & {
-      [Symbol.asyncDispose]: () => Promise<void>
-    }
-  >,
-  options: NextKVAdapterOptions = {}
-): Promise<Adapter> {
-  const mergedOptions = {
-    ...defaultOptions,
-    ...options,
-  }
-
-  const { baseKeyPrefix } = mergedOptions
-  const accountKeyPrefix = baseKeyPrefix + mergedOptions.accountKeyPrefix
-  const accountByUserIdPrefix =
-    baseKeyPrefix + mergedOptions.accountByUserIdPrefix
-  const emailKeyPrefix = baseKeyPrefix + mergedOptions.emailKeyPrefix
-  const sessionKeyPrefix = baseKeyPrefix + mergedOptions.sessionKeyPrefix
-  const sessionByUserIdKeyPrefix =
-    baseKeyPrefix + mergedOptions.sessionByUserIdKeyPrefix
-  const userKeyPrefix = baseKeyPrefix + mergedOptions.userKeyPrefix
-  const verificationTokenKeyPrefix =
-    baseKeyPrefix + mergedOptions.verificationTokenKeyPrefix
-
-  //await using client = await natsConnect()
-
   const setObjectAsJson = async (key: string, obj: any) => {
-    await using client = await natsConnect()
-    return await client.authKV.put(key, JSON.stringify(obj))
+    return await natsPut(key, JSON.stringify(obj))
+  }
+
+  const natsPut = async (key: string, obj: any) => {
+    if (typeof natsConnect == "function") {
+      await using nc = await natsConnect()
+      return await nc.kv.put(key, obj)
+    } else {
+      return await natsConnect.put(key, obj)
+    }
+  }
+  const natsPurge = async (key: string) => {
+    if (typeof natsConnect == "function") {
+      await using nc = await natsConnect()
+      return await nc.kv.purge(key)
+    } else {
+      return await natsConnect.purge(key)
+    }
+  }
+  const natsGet = async (key: string) => {
+    if (typeof natsConnect == "function") {
+      await using nc = await natsConnect()
+      return await nc.kv.get(key)
+    } else {
+      return await natsConnect.get(key)
+    }
   }
 
   const setAccount = async (id: string, account: AdapterAccount) => {
     const accountKey = accountKeyPrefix + natsKey(id)
     await setObjectAsJson(accountKey, account)
-    await using client = await natsConnect()
-    await client.authKV.put(
-      accountByUserIdPrefix + natsKey(account.userId),
-      accountKey
-    )
+    natsPut(accountByUserIdPrefix + natsKey(account.userId), accountKey)
     return account
   }
 
   const getAccount = async (id: string) => {
-    await using client = await natsConnect()
-    const data = await client.authKV.get(accountKeyPrefix + natsKey(id))
+    const data = await natsGet(accountKeyPrefix + natsKey(id))
     if (!data || data.length == 0) return null
     const account = data.json<AdapterAccount>()
     return hydrateDates(account)
@@ -366,8 +176,7 @@ export async function NatsKVAdapterAsync(
   ): Promise<AdapterSession> => {
     const sessionKey = sessionKeyPrefix + natsKey(id)
     await setObjectAsJson(sessionKey, session)
-    await using client = await natsConnect()
-    await client.authKV.put(
+    await natsPut(
       sessionByUserIdKeyPrefix + natsKey(session.userId),
       sessionKey
     )
@@ -375,8 +184,7 @@ export async function NatsKVAdapterAsync(
   }
 
   const getSession = async (id: string) => {
-    await using client = await natsConnect()
-    const data = await client.authKV.get(sessionKeyPrefix + natsKey(id))
+    const data = await natsGet(sessionKeyPrefix + natsKey(id))
     if (!data || data.length == 0) return null
     const session = data.json<AdapterSession>()
     return hydrateDates(session)
@@ -387,17 +195,13 @@ export async function NatsKVAdapterAsync(
     user: AdapterUser
   ): Promise<AdapterUser> => {
     await setObjectAsJson(userKeyPrefix + natsKey(id), user)
-    await using client = await natsConnect()
-    await client.authKV.put(`${emailKeyPrefix}${natsKey(user.email)}`, id)
+    await natsPut(`${emailKeyPrefix}${natsKey(user.email)}`, id)
     return user
   }
 
   const getUser = async (id: string) => {
-    console.log("getUser: ", id)
-    await using client = await natsConnect()
-    const data = await client.authKV.get(userKeyPrefix + natsKey(id))
+    const data = await natsGet(userKeyPrefix + natsKey(id))
     if (!data || data.length == 0) return null
-    console.log("getUser", data)
     const user = data.json<AdapterUser>()
     return hydrateDates(user)
   }
@@ -411,13 +215,9 @@ export async function NatsKVAdapterAsync(
     },
     getUser,
     async getUserByEmail(email) {
-      console.log("getUserByEmail: ", emailKeyPrefix + email)
-      await using client = await natsConnect()
-      const data = await client.authKV.get(emailKeyPrefix + natsKey(email))
+      const data = await natsGet(emailKeyPrefix + natsKey(email))
       if (!data || data.length == 0) return null
-      console.log("GetUserByEmail - json: ", data.string())
       const userId = data.string()
-
       return await getUser(userId)
     },
     async getUserByAccount(account) {
@@ -450,8 +250,7 @@ export async function NatsKVAdapterAsync(
       return await setSession(updates.sessionToken, { ...session, ...updates })
     },
     async deleteSession(sessionToken) {
-      await using client = await natsConnect()
-      await client.authKV.purge(sessionKeyPrefix + sessionToken)
+      await natsPurge(sessionKeyPrefix + sessionToken)
     },
     async createVerificationToken(verificationToken) {
       await setObjectAsJson(
@@ -469,11 +268,10 @@ export async function NatsKVAdapterAsync(
         natsKey(verificationToken.identifier) +
         "." +
         natsKey(verificationToken.token)
-      await using client = await natsConnect()
-      const data = await client.authKV.get(tokenKey)
+      const data = await natsGet(tokenKey)
       if (!data || data.length == 0) return null
       const token = data.json<VerificationToken>()
-      await client.authKV.purge(tokenKey)
+      await natsPurge(tokenKey)
       return hydrateDates(token)
       // return reviveFromJson(token)
     },
@@ -482,30 +280,26 @@ export async function NatsKVAdapterAsync(
       const dbAccount = await getAccount(natsKey(id))
       if (!dbAccount) return
       const accountKey = `${accountKeyPrefix}${natsKey(id)}`
-      await using client = await natsConnect()
-      await client.authKV.purge(accountKey)
-      await client.authKV.purge(
-        `${(accountByUserIdPrefix + dbAccount.userId) as string}`
-      )
+      await natsPurge(accountKey)
+      await natsPurge(`${(accountByUserIdPrefix + dbAccount.userId) as string}`)
     },
     async deleteUser(userId) {
       const user = await getUser(natsKey(userId))
       if (!user) return
       const accountByUserKey = accountByUserIdPrefix + natsKey(userId)
-      await using client = await natsConnect()
-      const accountKey = await client.authKV
-        .get(accountByUserKey)
-        .then((data) => data?.string())
+      const accountKey = await natsGet(accountByUserKey).then((data) =>
+        data?.string()
+      )
       const sessionByUserIdKey = sessionByUserIdKeyPrefix + natsKey(userId)
-      const sessionKey = await client.authKV
-        .get(sessionByUserIdKey)
-        .then((data) => data?.string())
-      await client.authKV.purge(userKeyPrefix + natsKey(userId))
-      await client.authKV.purge(`${emailKeyPrefix}${natsKey(user.email)}`)
-      await client.authKV.purge(accountKey as string)
-      await client.authKV.purge(accountByUserKey)
-      await client.authKV.purge(sessionKey as string)
-      await client.authKV.purge(sessionByUserIdKey)
+      const sessionKey = await natsGet(sessionByUserIdKey).then((data) =>
+        data?.string()
+      )
+      await natsPurge(userKeyPrefix + natsKey(userId))
+      await natsPurge(`${emailKeyPrefix}${natsKey(user.email)}`)
+      await natsPurge(accountKey as string)
+      await natsPurge(accountByUserKey)
+      await natsPurge(sessionKey as string)
+      await natsPurge(sessionByUserIdKey)
     },
   }
 }

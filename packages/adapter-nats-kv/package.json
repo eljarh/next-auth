@@ -1,6 +1,6 @@
 {
   "name": "@mattilsynet/nats-kv-adapter",
-  "version": "0.0.2",
+  "version": "0.0.6",
   "description": "NATS KeyValue-store adapter for Auth.js.",
   "homepage": "https://authjs.dev",
   "repository": "https://github.com/eljarh/next-auth",
