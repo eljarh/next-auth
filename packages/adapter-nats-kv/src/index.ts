@@ -1,8 +1,8 @@
 /**
  * <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16}}>
  *  <p>Official <a href="https://nats.io">NATS KeyValue</a> adapter for Auth.js / NextAuth.js.</p>
- *  <a href="https://docs.upstash.com/redis">
- *   <img style={{display: "block"}} src="https://authjs.dev/img/adapters/upstash-redis.svg" width="60"/>
+ *  <a href="https://nats.io">
+ *   <img style={{display: "block"}} src="https://authjs.dev/img/adapters/nats.svg" width="60"/>
  *  </a>
  * </div>
  *
@@ -37,8 +37,8 @@ import { KV } from "@nats-io/kv"
 
 */
 
-/** This is the interface of the Upstash Redis adapter options. */
-export interface NextKVAdapterOptions {
+/** This is the interface of the Nats KV adapter options. */
+export interface NatsKVAdapterOptions {
   /**
    * The base prefix for your keys
    */
@@ -108,7 +108,7 @@ export function NatsKVAdapter(
         }
       >)
     | KV,
-  options: NextKVAdapterOptions = {}
+  options: NatsKVAdapterOptions = {}
 ): Adapter {
   const mergedOptions = {
     ...defaultOptions,

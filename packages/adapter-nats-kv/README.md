@@ -3,8 +3,8 @@
   <a href="https://authjs.dev" target="_blank">
     <img height="64px" src="https://authjs.dev/img/logo-sm.png" />
   </a>
-  <a href="https://docs.upstash.com/redis" target="_blank">
-    <img height="64px" src="https://authjs.dev/img/adapters/upstash-redis.svg"/>
+  <a href="https://nats.io" target="_blank">
+    <img height="64px" src="https://authjs.dev/img/adapters/nats.svg"/>
   </a>
   <h3 align="center"><b>NATS KeyValue-store Adapter</b> - NextAuth.js / Auth.js</a></h3>
   <p align="center" style="align: center;">
