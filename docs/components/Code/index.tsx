@@ -1,13 +1,15 @@
+import { useSearchParams } from "next/navigation"
 import { useRouter } from "next/router"
 import { useThemeConfig } from "nextra-theme-docs"
 import { Tabs } from "nextra/components"
-import React, { Children, useEffect, useState } from "react"
+import React, { Children, useEffect, MouseEvent } from "react"
 
 interface ChildrenProps {
   children: React.ReactNode
 }
 
 const AUTHJS_TAB_KEY = "authjs.codeTab.framework"
+const AUTHJS_TAB_KEY_ALL = "authjs.codeTab.framework.all"
 
 Code.Next = NextCode
 Code.NextClient = NextClientCode
@@ -33,54 +35,162 @@ const allFrameworks = {
   [ExpressCode.name]: "Express",
 }
 
-const findTabIndex = (frameworks: Record<string, string>, tab: string) => {
-  // TODO: Slugify instead of matching on indexes
-  return Object.values(frameworks).findIndex(
-    (f) => f.toLowerCase() === tab.toLowerCase()
+const findFrameworkKey = (
+  text: string,
+  frameworks: Record<string, string>
+): string | null => {
+  const entry = Object.entries(frameworks).find(([_, value]) => value === text)
+  return entry ? entry[0] : null
+}
+
+const getIndexFrameworkFromUrl = (
+  url: string,
+  frameworks: Record<string, string>
+): number | null => {
+  const params = new URLSearchParams(url)
+  const paramValue = params.get("framework")
+  if (!paramValue) return null
+
+  const decodedValue = decodeURI(paramValue)
+
+  const index = Object.values(frameworks).findIndex(
+    (value) => value === decodedValue
   )
+  return index === -1 ? null : index
+}
+
+const getIndexFrameworkFromStorage = (
+  frameworks: Record<string, string>,
+  isAllFrameworks: boolean
+): number | null => {
+  const storageKey = isAllFrameworks ? AUTHJS_TAB_KEY_ALL : AUTHJS_TAB_KEY
+  const storedIndex = window.localStorage.getItem(storageKey)
+
+  if (!storedIndex) {
+    return null
+  }
+
+  return parseInt(storedIndex) % Object.keys(frameworks).length
+}
+
+const updateFrameworkStorage = (
+  frameworkURI: string,
+  frameworks: Record<string, string>,
+  isAllFrameworks: boolean
+): void => {
+  const index = Object.values(frameworks).findIndex(
+    (value) => encodeURI(value) === frameworkURI
+  )
+  if (index === -1) return
+
+  const storageKey = isAllFrameworks ? AUTHJS_TAB_KEY_ALL : AUTHJS_TAB_KEY
+  window.localStorage.setItem(storageKey, index.toString())
+
+  // Update other storage if framework exists in other object
+  const otherFrameworksValues = Object.values(
+    isAllFrameworks ? baseFrameworks : allFrameworks
+  )
+  const otherStorageKey = isAllFrameworks ? AUTHJS_TAB_KEY : AUTHJS_TAB_KEY_ALL
+
+  const encodedFrameworksValues = otherFrameworksValues.map((value) =>
+    encodeURI(value)
+  )
+  const existsInOther = encodedFrameworksValues.some(
+    (encodedFramework) => encodedFramework === frameworkURI
+  )
+  if (existsInOther) {
+    const otherIndex = otherFrameworksValues.findIndex(
+      (encodedFramework) => encodedFramework === frameworkURI
+    )
+    window.localStorage.setItem(otherStorageKey, otherIndex.toString())
+    // see https://github.com/shuding/nextra/blob/7ae958f02922e608151411042f658480b75164a6/packages/nextra/src/client/components/tabs/index.client.tsx#L106
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: otherStorageKey,
+        newValue: otherIndex.toString(),
+      })
+    )
+  }
 }
 
 export function Code({ children }: ChildrenProps) {
   const router = useRouter()
-  const {
-    query: { framework },
-  } = router
-  const childs = Children.toArray(children)
+  const searchParams = useSearchParams()
+  const childElements = Children.toArray(children)
   const { project } = useThemeConfig()
 
-  const withNextJsPages = childs.some(
+  const withNextJsPages = childElements.some(
     // @ts-expect-error: Hacky dynamic child wrangling
     (p) => p && p.type.name === NextClientCode.name
   )
 
   const renderedFrameworks = withNextJsPages ? allFrameworks : baseFrameworks
-  const [tabIndex, setTabIndex] = useState(0)
+
+  const updateFrameworkInUrl = (frameworkURI: string): void => {
+    if (frameworkURI === "undefined") return
+
+    const params = new URLSearchParams(searchParams?.toString())
+    params.set("framework", frameworkURI)
+
+    router.push(`${router.pathname}?${params.toString()}`, undefined, {
+      scroll: false,
+    })
+  }
+
+  const handleClickFramework = (event: MouseEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof HTMLButtonElement)) return
+    const { textContent } = event.target as unknown as HTMLDivElement
+    if (!textContent) return
+
+    const frameworkURI = encodeURI(textContent)
+    updateFrameworkInUrl(frameworkURI)
+    updateFrameworkStorage(frameworkURI, renderedFrameworks, withNextJsPages)
+
+    // Focus and scroll to maintain position when code blocks above are expanded
+    const element = event.target as HTMLButtonElement
+    const rect = element.getBoundingClientRect()
+    requestAnimationFrame(() => {
+      element.focus()
+      window.scrollBy(0, element.getBoundingClientRect().top - rect.top)
+    })
+  }
 
   useEffect(() => {
-    const savedTabPreference = Number(
-      window.localStorage.getItem(AUTHJS_TAB_KEY)
+    const indexFrameworkFromStorage = getIndexFrameworkFromStorage(
+      renderedFrameworks,
+      withNextJsPages
     )
-    if (framework) {
-      window.localStorage.setItem(
-        AUTHJS_TAB_KEY,
-        String(findTabIndex(renderedFrameworks, framework as string))
+    const indexFrameworkFromUrl = getIndexFrameworkFromUrl(
+      router.asPath,
+      renderedFrameworks
+    )
+
+    if (indexFrameworkFromStorage === null) {
+      updateFrameworkStorage(
+        encodeURI(renderedFrameworks[indexFrameworkFromUrl ?? 0]),
+        renderedFrameworks,
+        withNextJsPages
       )
-      setTabIndex(findTabIndex(renderedFrameworks, framework as string))
-    } else if (savedTabPreference) {
-      setTabIndex(savedTabPreference)
     }
-  }, [framework, renderedFrameworks])
+
+    if (!indexFrameworkFromUrl) {
+      const index = indexFrameworkFromStorage ?? 0
+      updateFrameworkInUrl(encodeURI(renderedFrameworks[index]))
+    }
+  }, [router.pathname, renderedFrameworks, withNextJsPages])
 
   return (
-    <div className="[&_div[role='tablist']]:!pb-0">
+    <div
+      className="[&_div[role='tablist']]:!pb-0"
+      onClick={handleClickFramework}
+    >
       <Tabs
-        storageKey={AUTHJS_TAB_KEY}
+        storageKey={withNextJsPages ? AUTHJS_TAB_KEY_ALL : AUTHJS_TAB_KEY}
         items={Object.values(renderedFrameworks)}
-        selectedIndex={tabIndex}
       >
         {Object.keys(renderedFrameworks).map((f) => {
           // @ts-expect-error: Hacky dynamic child wrangling
-          const child = childs.find((c) => c?.type?.name === f)
+          const child = childElements.find((c) => c?.type?.name === f)
 
           // @ts-expect-error: Hacky dynamic child wrangling
           return Object.keys(child?.props ?? {}).length ? (

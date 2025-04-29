@@ -58,6 +58,7 @@ import { AuthConfig } from "./index.js"
 import type { JWTOptions } from "./jwt.js"
 import type { Cookie } from "./lib/utils/cookie.js"
 import type { LoggerInstance } from "./lib/utils/logger.js"
+import type { WarningCode } from "./warnings.js"
 import type {
   CredentialsConfig,
   EmailConfig,
@@ -72,7 +73,7 @@ import type {
 
 export type { WebAuthnOptionsResponseBody } from "./lib/utils/webauthn-utils.js"
 export type { AuthConfig } from "./index.js"
-export type { LoggerInstance }
+export type { LoggerInstance, WarningCode }
 export type Awaitable<T> = T | PromiseLike<T>
 export type Awaited<T> = T extends Promise<infer U> ? U : T
 
@@ -248,17 +249,19 @@ export interface DefaultSession {
 /** The active session of the logged in user. */
 export interface Session extends DefaultSession {}
 
-/**
- * The shape of the returned object in the OAuth providers' `profile` callback,
- * available in the `jwt` and `session` callbacks,
- * or the second parameter of the `session` callback, when using a database.
- */
-export interface User {
+export interface DefaultUser {
   id?: string
   name?: string | null
   email?: string | null
   image?: string | null
 }
+
+/**
+ * The shape of the returned object in the OAuth providers' `profile` callback,
+ * available in the `jwt` and `session` callbacks,
+ * or the second parameter of the `session` callback, when using a database.
+ */
+export interface User extends DefaultUser {}
 
 // Below are types that are only supposed be used by next-auth internally
 
